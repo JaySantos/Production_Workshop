@@ -1,17 +1,26 @@
 """Defines the query called by the user."""
 
 import logging
+import os
+import random
 import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response, status
+import litellm
+from fastapi import BackgroundTasks, FastAPI, Response, status
+from ragas.dataset_schema import SingleTurnSample
+from ragas.llms import llm_factory
+from ragas.metrics import Faithfulness
 
 from embedder import Embedder
 from generation import Generation
 from queryLogFormatter import QueryLogFormatter
 from questioncache import QuestionCache
 from vectorstore import VectorStore
+
+RAGAS_SAMPLE_RATE = 1.0
+FAITHFULNESS_FLOOR = 0.75
 
 
 def build_prompt(question: str, chunks: list[dict]) -> str:
@@ -41,6 +50,12 @@ async def lifespan(app: FastAPI):
     app.state.logger.addHandler(handler)
     handler.setFormatter(QueryLogFormatter())
     app.state.generation = Generation(app.state.logger)
+    app.state.evaluator = llm_factory(
+        "groq/" + os.environ.get("GROQ_MODEL"),
+        provider="litellm",
+        client=litellm.completion,
+    )
+    app.state.scorer = Faithfulness(llm=app.state.evaluator)
     yield
     app.state.questioncache.save()
 
@@ -49,7 +64,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.post("/query", status_code=200)
-def send_prompt(q: str, response: Response) -> dict:
+def send_prompt(q: str, response: Response, background_tasks: BackgroundTasks) -> dict:
     result = {}
     request_id = uuid.uuid4()
     app.state.logger.info(
@@ -131,39 +146,36 @@ def send_prompt(q: str, response: Response) -> dict:
         },
     )
     result = {"answer": result, "sources": list(top_data.keys())}
-    app.state.questioncache.add(
-        q, result["answer"], embedded_query[0], list(top_data.keys())
-    )  # noqa: E501
-    app.state.questioncache.save()
+
+    if random.random() < RAGAS_SAMPLE_RATE:
+        background_tasks.add_task(
+            validate_and_cache, q, result, top_data, embedded_query
+        )
     return result
 
-    # print(result)
-    # print()
-    # print("Source Chunks:")
-    # for data_id in top_data:
-    #     print(data_id)
 
-
-# def main(query_text=None, vector_store=None, embedder=None, generation=None):
-#     """Run the query from argument 1 using the documents embedded and stored in disk."""
-#     v = vector_store or VectorStore()
-#     e = embedder or Embedder()
-#     v.load()
-#     app = FastAPI()
-
-#     @app.post("/query/{query}")
-#     def send_prompt(query: str):
-#         g = generation or Generation()
-#         embedded_query = e.embed([query])
-#         top_data = v.query(embedded_query[0], 5)
-#         prompt = build_prompt(query, top_data)
-#         result = g.generate(prompt)
-#         print(result)
-#         print()
-#         print("Source Chunks:")
-#         for data_id in top_data:
-#             print(data_id)
-
-
-# if __name__ == "__main__":
-#     main()
+async def validate_and_cache(q: str, result, top_data: dict, embedded_query):
+    app.state.logger.info(
+        "VALIDATING ANSWER BEFORE CACHING",
+        extra={"context": {"query": q}},
+    )
+    context_strings = []
+    for data_id in top_data:
+        context_strings.append(top_data[data_id]["text"])
+    sample = SingleTurnSample(
+        user_input=q, response=result["answer"], retrieved_contexts=context_strings
+    )
+    score = await app.state.scorer.single_turn_ascore(sample)
+    app.state.logger.info(
+        "VALIDATION COMPLETE",
+        extra={"context": {"query": q, "score": score}},
+    )
+    if score >= FAITHFULNESS_FLOOR:
+        app.state.questioncache.add(
+            q, result["answer"], embedded_query[0], list(top_data.keys())
+        )  # noqa: E501
+        app.state.questioncache.save()
+        app.state.logger.info(
+            "QUERY SAVED",
+            extra={"context": {"query": q, "score": score}},
+        )

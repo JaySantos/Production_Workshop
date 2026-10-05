@@ -10,12 +10,33 @@ class Generation:
 
     def __init__(self, logger):
         self.logger = logger
+        if os.environ.get("GENERATION_BACKEND") == "nvidia":
+            self.model = os.environ.get("NVIDIA_MODEL")
+            self.base_url = os.environ.get("NVIDIA_URL")
+            self.key = os.environ.get("NVIDIA_API_KEY")
+        elif os.environ.get("GENERATION_BACKEND") == "groq":
+            self.model = os.environ.get("GROQ_MODEL")
+            self.base_url = os.environ.get("GROQ_URL")
+            self.key = os.environ.get("GROQ_API_KEY")
+        else:
+            raise ValueError(
+                "Invalid GENERATION_BACKEND provided. Please set the GENERATION_BACKEND environment variable to either 'nvidia' or 'groq'."  # noqa: E501
+            )
+
+        if self.base_url is None:
+            raise ValueError("Invalid base_url provided.")
+
+        if self.model is None:
+            raise ValueError("Invalid model provided.")
+
+        if self.key is None:
+            raise ValueError(
+                "API key not found. Please set the GROQ_API_KEY or NVIDIA_API_KEY environment variable."  # noqa: E501
+            )
 
     def generate(
         self,
         prompt: str,
-        model: str = "openai/gpt-oss-120b",
-        base_url: str = "https://api.groq.com/openai/v1",
         request_id: str = None,
     ) -> str:
         """Send the prompt + context to the model and return the result."""
@@ -28,13 +49,12 @@ class Generation:
         )
         try:
             result = requests.post(
-                f"{base_url}/chat/completions",
+                f"{self.base_url}/chat/completions",
                 headers={
-                    # "Authorization": f"Bearer {TEST_KEY}"  # noqa: E501
-                    "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"  # noqa: E501
+                    "Authorization": f"Bearer {self.key}"  # noqa: E501
                 },
                 json={
-                    "model": model,
+                    "model": self.model,
                     "messages": [{"role": "user", "content": prompt}],
                 },
                 timeout=60,
