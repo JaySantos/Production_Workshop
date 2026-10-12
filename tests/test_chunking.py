@@ -21,3 +21,9 @@ def test_snaps_to_last_space_within_window():
     assert (
         chunks[0] == "aaaa bbbb"
     )  # placeholder — replace with the real expected value
+
+
+def test_chunk_size_0():
+    text = "Hello World"
+    chunks = chunk_text(text, chunk_size=0, chunk_overlap=5)
+    assert chunks[0] == "Hello World"

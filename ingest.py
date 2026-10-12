@@ -8,7 +8,7 @@ from embedder import Embedder
 from vectorstore import VectorStore
 
 
-def main(folder=None, embedder=None, vector_store=None):
+def main(chunk_size=0, chunk_overlap=0, folder=None, embedder=None, vector_store=None):
     """Take files present in folder, chunks them and embed the chunk."""
     chunks = {}
     folder = folder or sys.argv[1]
@@ -17,7 +17,7 @@ def main(folder=None, embedder=None, vector_store=None):
         full_path = os.path.join(folder, f)
         with open(full_path, "r", encoding="utf-8") as file:
             file_content = file.read()
-        file_content_chunks = chunk_text(file_content, 150, 5)
+        file_content_chunks = chunk_text(file_content, chunk_size, chunk_overlap)
         for i, chunk in enumerate(file_content_chunks):
             chunks[f"{f}::{i}"] = chunk
     chunk_strings = list(chunks.values())

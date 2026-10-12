@@ -1,2 +1,7 @@
 [tool.ruff.lint]
 select = ["E", "F", "A", "D", "SIM", "PLR"]
+
+[dependency-groups]
+dev = [
+    "python-dotenv>=1.2.4",
+]

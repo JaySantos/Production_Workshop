@@ -1,5 +1,6 @@
 """Defines the query called by the user."""
 
+import json
 import logging
 import os
 import random
@@ -56,6 +57,8 @@ async def lifespan(app: FastAPI):
         client=litellm.completion,
     )
     app.state.scorer = Faithfulness(llm=app.state.evaluator)
+    with open("game_slugs.json", "r") as f:
+        app.state.slugs = json.load(f)
     yield
     app.state.questioncache.save()
 
@@ -151,6 +154,11 @@ def send_prompt(q: str, response: Response, background_tasks: BackgroundTasks) -
         background_tasks.add_task(
             validate_and_cache, q, result, top_data, embedded_query
         )
+
+    for i, s in enumerate(result["sources"]):
+        id = s.split(":")[0]
+        result["sources"][i] = app.state.slugs.get(id, s)
+
     return result
 
 

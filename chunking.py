@@ -24,6 +24,10 @@ def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     index = 0
     chunks = []
 
+    if chunk_size == 0:
+        chunks.append(text)
+        return chunks
+
     if chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be less than chunk_size")
 
@@ -46,7 +50,7 @@ def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     return chunks
 
 
-text = "aaaa bbbb cccc dddd"
-chunks = chunk_text(text, chunk_size=12, chunk_overlap=2)
-for c in chunks:
-    print(c)
+# text = "aaaa bbbb cccc dddd"
+# chunks = chunk_text(text, chunk_size=12, chunk_overlap=2)
+# for c in chunks:
+#     print(c)
