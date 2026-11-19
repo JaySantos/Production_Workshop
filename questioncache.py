@@ -58,5 +58,9 @@ class QuestionCache:
         fileoperations.save(file_data, path)
 
     def load(self, path: str = "questioncache.json") -> None:
-        """Load the question cache JSON filefrom disk."""
-        self.data = fileoperations.load(path)
+        """Load the question cache JSON file from disk.
+
+        JSON object keys are always strings, so convert them back to the
+        integer IDs that add() expects.
+        """
+        self.data = {int(k): v for k, v in fileoperations.load(path).items()}
